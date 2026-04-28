@@ -1,6 +1,10 @@
 <?php
 namespace WP_Bookable_Products\Core;
 
+use WP_Bookable_Products\Admin as WBP_Admin;
+use WP_Bookable_Products\Rest as WBP_Rest;
+use WP_Bookable_Products\Storage\Database;
+
 /**
  * Main Plugin class — bootstraps all components.
  */
@@ -24,7 +28,8 @@ class Plugin {
 
 		// Admin.
 		if ( is_admin() ) {
-			Admin\Menu::init();
+			WBP_Admin\\Menu::init();
+			WBP_Admin\\MetaBoxes::init();
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
 		}
 

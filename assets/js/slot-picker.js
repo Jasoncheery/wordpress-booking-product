@@ -4,12 +4,19 @@
 (function ($) {
   'use strict';
 
+  function formatDate(date) {
+    var year = date.getFullYear();
+    var month = String(date.getMonth() + 1).padStart(2, '0');
+    var day = String(date.getDate()).padStart(2, '0');
+    return year + '-' + month + '-' + day;
+  }
+
   var WbpSlotPicker = function (container, options) {
     this.container = $(container);
     this.productId = options.productId || 0;
     this.resourceId = options.resourceId || 0;
-    this.currentDate = options.startDate || jQuery.datepicker.parseDate('yy-mm-dd', new Date());
-    this.apiRoot = wbp_slot_picker.ajax_url;
+    this.currentDate = options.startDate || formatDate(new Date());
+    this.apiRoot = (wbp_slot_picker.rest_url || '').replace(/\/$/, '');
     this.nonce = wbp_slot_picker.nonce;
     this.selectedSlot = null;
 
@@ -35,16 +42,19 @@
   WbpSlotPicker.prototype.renderCalendar = function () {
     var self = this;
     var dateStr = self.currentDate;
-    var apiUrl = self.apiRoot + '/wbp/v1/slots/product/' + self.productId + '?date=' + dateStr;
+    var apiUrl = self.apiRoot + '/slots/product/' + self.productId + '?date=' + encodeURIComponent(dateStr);
 
     self.container.find('.wbp-slots').html('<tr><td colspan="7" class="text-center">' + wbp_slot_picker.i18n.loading + '</td></tr>');
 
     $.ajax({
       url: apiUrl,
-      data: { _wpnonce: self.nonce },
+      method: 'GET',
+      beforeSend: function (xhr) {
+        xhr.setRequestHeader('X-WP-Nonce', self.nonce);
+      },
       success: function (response) {
-        if (response.data && response.data.slots) {
-          self.renderSlots(response.data.slots);
+        if (response && response.slots) {
+          self.renderSlots(response.slots);
         } else {
           self.container.find('.wbp-slots').html('<tr><td colspan="7" class="text-center">' + wbp_slot_picker.i18n.no_slots + '</td></tr>');
         }
@@ -93,7 +103,7 @@
   WbpSlotPicker.prototype.changeMonth = function (delta) {
     var d = new Date(this.currentDate);
     d.setMonth(d.getMonth() + delta);
-    this.currentDate = jQuery.datepicker.formatDate('yy-mm-dd', d);
+    this.currentDate = formatDate(d);
     this.renderCalendar();
   };
 
@@ -103,7 +113,7 @@
       new WbpSlotPicker(this, {
         productId: $(this).data('product-id') || 0,
         resourceId: $(this).data('resource-id') || 0,
-        startDate: $(this).data('start-date') || jQuery.datepicker.formatDate('yy-mm-dd', new Date())
+        startDate: $(this).data('start-date') || formatDate(new Date())
       });
     });
   });

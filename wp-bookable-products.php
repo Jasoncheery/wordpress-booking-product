@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 // Prevent direct access.
 if ( ! class_exists( 'WP_Bookable_Products\Autoloader', false ) ) {
 	require_once __DIR__ . '/includes/Autoloader.php';
-	new WP_Bookable_Products\Autoloader( __NAMESPACE__, __DIR__ . '/includes/' );
+	new WP_Bookable_Products\Autoloader( 'WP_Bookable_Products', __DIR__ . '/includes/' );
 }
 
 define( 'WBP_VERSION', '1.0.0-alpha' );

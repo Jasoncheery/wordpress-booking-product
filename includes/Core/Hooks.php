@@ -11,7 +11,7 @@ class Hooks {
 	 */
 	public static function init(): void {
 		// Cart item data — store booking slot selection in cart items.
-		add_action( 'woocommerce_add_cart_item_data', [ __CLASS__, 'add_cart_item_booking_data' ], 10, 3 );
+		add_filter( 'woocommerce_add_cart_item_data', [ __CLASS__, 'add_cart_item_booking_data' ], 10, 3 );
 
 		// Validate cart items on add to cart.
 		add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'validate_bookable_product_add_to_cart' ], 10, 3 );
@@ -23,7 +23,7 @@ class Hooks {
 		add_action( 'woocommerce_checkout_order_processed', [ __CLASS__, 'process_order_bookings' ], 10, 2 );
 
 		// Mark bookings when order status changes.
-		add_action( 'transition_post_status', [ __CLASS__, 'handle_order_status_change' ], 10, 3 );
+		add_action( 'woocommerce_order_status_changed', [ __CLASS__, 'handle_order_status_change' ], 10, 3 );
 
 		// Add custom fields to checkout for booking time slot selection.
 		add_action( 'woocommerce_after_order_notes', [ __CLASS__, 'render_booking_fields_on_checkout' ] );
@@ -50,7 +50,7 @@ class Hooks {
 			'customer_email' => is_email( $_POST['wbp_customer_email'] ?? '' ) ? sanitize_email( $_POST['wbp_customer_email'] ) : '',
 		];
 
-		$cart_item_data['unique_key'] = wc_generate_cart_item_key( $product_id, [], $variation_id );
+		$cart_item_data['unique_key'] = md5( wp_json_encode( $cart_item_data['wbp_booking_info'] ) . ':' . microtime( true ) );
 		return $cart_item_data;
 	}
 
@@ -97,7 +97,7 @@ class Hooks {
 	 * @param WC_Cart_Item $cart_item  Cart item object.
 	 * @return array Modified item data.
 	 */
-	public static function display_booking_item_data( array $item_data, \WC_Cart_Item $cart_item ): array {
+	public static function display_booking_item_data( array $item_data, array $cart_item ): array {
 		if ( isset( $cart_item['wbp_booking_info'] ) && is_array( $cart_item['wbp_booking_info'] ) ) {
 			$info = $cart_item['wbp_booking_info'];
 			$item_data[] = [
@@ -161,11 +161,12 @@ class Hooks {
 	/**
 	 * Handle order status transitions.
 	 *
-	 * @param string $new_status New post status.
-	 * @param string $old_status Previous post status.
-	 * @param \WC_Order $order Order object.
+	 * @param int    $order_id Order ID.
+	 * @param string $old_status Previous order status.
+	 * @param string $new_status New order status.
 	 */
-	public static function handle_order_status_change( string $new_status, string $old_status, \WC_Order $order ): void {
+	public static function handle_order_status_change( int $order_id, string $old_status, string $new_status ): void {
+		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof \WC_Order ) {
 			return;
 		}
@@ -173,8 +174,8 @@ class Hooks {
 		global $wpdb;
 
 		switch ( $new_status ) {
-			case 'wc-processing':
-			case 'wc-completed':
+			case 'processing':
+			case 'completed':
 				// Confirm pending bookings linked to this order.
 				$bookings = $wpdb->get_results(
 					$wpdb->prepare(
@@ -188,7 +189,7 @@ class Hooks {
 				}
 				break;
 
-			case 'wc-cancelled':
+			case 'cancelled':
 				// Cancel pending/confirmed bookings.
 				$bookings = $wpdb->get_results(
 					$wpdb->prepare(
@@ -218,7 +219,11 @@ class Hooks {
 	 */
 	public static function render_booking_fields_on_checkout( \WC_Checkout $checkout ): void {
 		$has_bookable = false;
-		foreach ( $checkout->get_cart()->get_cart() as $cart_item ) {
+		if ( ! WC()->cart ) {
+			return;
+		}
+
+		foreach ( WC()->cart->get_cart() as $cart_item ) {
 			$product = $cart_item['data'];
 			if ( $product && $product->is_type( 'bookable' ) ) {
 				$has_bookable = true;

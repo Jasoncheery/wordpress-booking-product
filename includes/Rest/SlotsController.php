@@ -4,7 +4,8 @@ namespace WP_Bookable_Products\Rest;
 use WP_REST_Controller;
 use WP_REST_Server;
 use WP_Error;
-use WP_Request;
+use WP_REST_Request;
+use WP_REST_Response;
 use WP_Bookable_Products\Engine\BookingService;
 use WP_Bookable_Products\Engine\Availability;
 use WP_Bookable_Products\Engine\ProductMeta;
@@ -97,10 +98,10 @@ class SlotsController extends WP_REST_Controller {
 	/**
 	 * Get slots for a specific resource on a date.
 	 *
-	 * @param WP_Request $request Request object.
+	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response with slot data.
 	 */
-	public function get_slots_for_resource( WP_Request $request ): WP_REST_Response {
+	public function get_slots_for_resource( WP_REST_Request $request ): WP_REST_Response {
 		$resource_id = absint( $request->get_param( 'resource_id' ) );
 		$date        = sanitize_text_field( $request->get_param( 'date' ) );
 
@@ -117,10 +118,10 @@ class SlotsController extends WP_REST_Controller {
 	/**
 	 * Get slots for a WooCommerce product (looks up its resource).
 	 *
-	 * @param WP_Request $request Request object.
+	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response with slot data.
 	 */
-	public function get_slots_for_product( WP_Request $request ): WP_REST_Response {
+	public function get_slots_for_product( WP_REST_Request $request ): WP_REST_Response {
 		$product_id = absint( $request->get_param( 'product_id' ) );
 		$date       = sanitize_text_field( $request->get_param( 'date' ) ?: '' );
 
@@ -143,10 +144,10 @@ class SlotsController extends WP_REST_Controller {
 	/**
 	 * Get slots for a date range (calendar view).
 	 *
-	 * @param WP_Request $request Request object.
+	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response.
 	 */
-	public function get_slots_for_range( WP_Request $request ): WP_REST_Response {
+	public function get_slots_for_range( WP_REST_Request $request ): WP_REST_Response {
 		$resource_id    = absint( $request->get_param( 'resource_id' ) );
 		$start_date     = sanitize_text_field( $request->get_param( 'start_date' ) );
 		$end_date       = sanitize_text_field( $request->get_param( 'end_date' ) );
@@ -164,10 +165,10 @@ class SlotsController extends WP_REST_Controller {
 	/**
 	 * Permission check — public read access for front-end slot lookup.
 	 *
-	 * @param WP_Request $request Request object.
+	 * @param WP_REST_Request $request Request object.
 	 * @return bool True if permitted.
 	 */
-	public function get_items_permissions_check( WP_Request $request ): bool {
+	public function get_items_permissions_check( WP_REST_Request $request ): bool {
 		return true; // Frontend needs to query availability without auth.
 	}
 }

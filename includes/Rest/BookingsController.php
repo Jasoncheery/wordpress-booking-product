@@ -4,7 +4,8 @@ namespace WP_Bookable_Products\Rest;
 use WP_REST_Controller;
 use WP_REST_Server;
 use WP_Error;
-use WP_Request;
+use WP_REST_Request;
+use WP_REST_Response;
 use WP_Bookable_Products\Engine\BookingService;
 use WP_Bookable_Products\Engine\BookingRepository;
 use WP_Bookable_Products\Storage\Database;
@@ -112,10 +113,10 @@ class BookingsController extends WP_REST_Controller {
 	/**
 	 * List all bookings (with filters).
 	 *
-	 * @param WP_Request $request Request object.
+	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response with bookings list.
 	 */
-	public function get_items( WP_Request $request ): WP_REST_Response {
+	public function get_items( WP_REST_Request $request ): WP_REST_Response {
 		$args = [];
 
 		if ( $request->get_param( 'resource_id' ) ) {
@@ -148,10 +149,10 @@ class BookingsController extends WP_REST_Controller {
 	/**
 	 * Create a new booking.
 	 *
-	 * @param WP_Request $request Request object.
+	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error Response.
 	 */
-	public function create_item( WP_Request $request ) {
+	public function create_item( WP_REST_Request $request ) {
 		try {
 			$data = [
 				'resource_id'        => absint( $request->get_param( 'resource_id' ) ),
@@ -183,10 +184,10 @@ class BookingsController extends WP_REST_Controller {
 	/**
 	 * Get a single booking.
 	 *
-	 * @param WP_Request $request Request object.
+	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error Response.
 	 */
-	public function get_item( WP_Request $request ) {
+	public function get_item( WP_REST_Request $request ) {
 		$id = absint( $request->get_param( 'id' ) );
 		$booking = BookingRepository::find_by_id( $id );
 
@@ -214,13 +215,13 @@ class BookingsController extends WP_REST_Controller {
 		// Update status if provided.
 		if ( $request->get_param( 'status' ) ) {
 			$status_map = [
-				'confirm' => 'confirmed',
-				'cancel'  => 'cancelled',
-				'complete' => 'completed',
+				'confirm'  => 'confirm',
+				'cancel'   => 'cancel',
+				'complete' => 'complete',
 			];
-			$new_status = $status_map[ $request->get_param( 'status' ) ] ?? '';
-			if ( $new_status && $new_status !== $booking['status'] ) {
-				BookingService::$new_status( $id );
+			$action_method = $status_map[ $request->get_param( 'status' ) ] ?? '';
+			if ( $action_method && method_exists( BookingService::class, $action_method ) ) {
+				BookingService::{$action_method}( $id );
 			}
 		}
 
@@ -232,10 +233,10 @@ class BookingsController extends WP_REST_Controller {
 	/**
 	 * Delete a booking.
 	 *
-	 * @param WP_Request $request Request object.
+	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error Response.
 	 */
-	public function delete_item( WP_Request $request ) {
+	public function delete_item( WP_REST_Request $request ) {
 		$id = absint( $request->get_param( 'id' ) );
 		$booking = BookingRepository::find_by_id( $id );
 
@@ -259,10 +260,10 @@ class BookingsController extends WP_REST_Controller {
 	/**
 	 * Cancel a booking (REST action endpoint).
 	 *
-	 * @param WP_Request $request Request object.
+	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error Response.
 	 */
-	public function cancel_item( WP_Request $request ) {
+	public function cancel_item( WP_REST_Request $request ) {
 		$id = absint( $request->get_param( 'id' ) );
 		try {
 			BookingService::cancel( $id );
@@ -275,10 +276,10 @@ class BookingsController extends WP_REST_Controller {
 	/**
 	 * Confirm a booking (REST action endpoint).
 	 *
-	 * @param WP_Request $request Request object.
+	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error Response.
 	 */
-	public function confirm_item( WP_Request $request ) {
+	public function confirm_item( WP_REST_Request $request ) {
 		$id = absint( $request->get_param( 'id' ) );
 		try {
 			BookingService::confirm( $id );
@@ -291,10 +292,10 @@ class BookingsController extends WP_REST_Controller {
 	/**
 	 * Complete a booking (REST action endpoint).
 	 *
-	 * @param WP_Request $request Request object.
+	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error Response.
 	 */
-	public function complete_item( WP_Request $request ) {
+	public function complete_item( WP_REST_Request $request ) {
 		$id = absint( $request->get_param( 'id' ) );
 		try {
 			BookingService::complete( $id );
@@ -330,19 +331,19 @@ class BookingsController extends WP_REST_Controller {
 
 	/* ---- Permission callbacks ---- */
 
-	public function check_admin_permission( WP_Request $request ): bool {
+	public function check_admin_permission( WP_REST_Request $request ): bool {
 		return current_user_can( 'manage_woocommerce' );
 	}
 
-	public function check_create_permission( WP_Request $request ): bool {
+	public function check_create_permission( WP_REST_Request $request ): bool {
 		return true; // Allow unauthenticated booking creation (cart-based).
 	}
 
-	public function check_read_permission( WP_Request $request ): bool {
+	public function check_read_permission( WP_REST_Request $request ): bool {
 		return current_user_can( 'read' ); // Logged-in users can read their own.
 	}
 
-	public function check_cancel_permission( WP_Request $request ): bool {
+	public function check_cancel_permission( WP_REST_Request $request ): bool {
 		$id = absint( $request->get_param( 'id' ) );
 		$booking = BookingRepository::find_by_id( $id );
 		if ( ! $booking ) {

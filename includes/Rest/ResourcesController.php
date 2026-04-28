@@ -4,7 +4,8 @@ namespace WP_Bookable_Products\Rest;
 use WP_REST_Controller;
 use WP_REST_Server;
 use WP_Error;
-use WP_Request;
+use WP_REST_Request;
+use WP_REST_Response;
 use WP_Bookable_Products\Storage\Database;
 
 /**
@@ -79,7 +80,7 @@ class ResourcesController extends WP_REST_Controller {
 		);
 	}
 
-	public function get_items( WP_Request $request ): WP_REST_Response {
+	public function get_items( WP_REST_Request $request ): WP_REST_Response {
 		$resources = Database::get_all_resources();
 		return new WP_REST_Response( [
 			'resources' => $resources,
@@ -87,7 +88,7 @@ class ResourcesController extends WP_REST_Controller {
 		], 200 );
 	}
 
-	public function get_item( WP_Request $request ): WP_REST_Response {
+	public function get_item( WP_REST_Request $request ) {
 		$id = absint( $request->get_param( 'id' ) );
 		$all = Database::get_all_resources();
 
@@ -100,7 +101,7 @@ class ResourcesController extends WP_REST_Controller {
 		return new WP_Error( 'wbp_resource_not_found', 'Resource not found.', [ 'status' => 404 ] );
 	}
 
-	public function create_item( WP_Request $request ) {
+	public function create_item( WP_REST_Request $request ) {
 		try {
 			$data = [
 				'resource_key'      => sanitize_text_field( $request->get_param( 'resource_key' ) ?: '' ),
@@ -133,7 +134,7 @@ class ResourcesController extends WP_REST_Controller {
 		}
 	}
 
-	public function update_item( WP_Request $request ) {
+	public function update_item( WP_REST_Request $request ) {
 		$id = absint( $request->get_param( 'id' ) );
 
 		try {
@@ -167,13 +168,13 @@ class ResourcesController extends WP_REST_Controller {
 		}
 	}
 
-	public function delete_item( WP_Request $request ): WP_REST_Response {
+	public function delete_item( WP_REST_Request $request ): WP_REST_Response {
 		$id = absint( $request->get_param( 'id' ) );
 		$deleted = Database::delete_resource( $id );
 		return new WP_REST_Response( [ 'deleted' => true, 'id' => $id ], 200 );
 	}
 
-	public function create_slots( WP_Request $request ): WP_REST_Response {
+	public function create_slots( WP_REST_Request $request ) {
 		$resource_id = absint( $request->get_param( 'id' ) );
 
 		try {
@@ -197,7 +198,7 @@ class ResourcesController extends WP_REST_Controller {
 		}
 	}
 
-	public function check_admin_permission( WP_Request $request ): bool {
+	public function check_admin_permission( WP_REST_Request $request ): bool {
 		return current_user_can( 'manage_woocommerce' );
 	}
 }

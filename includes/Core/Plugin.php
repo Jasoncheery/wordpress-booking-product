@@ -91,12 +91,17 @@ class Plugin {
 		wp_enqueue_style( 'wbp-frontend', WBP_PLUGIN_URL . 'assets/css/frontend.css', [], WBP_VERSION );
 		wp_enqueue_script( 'wbp-slot-picker', WBP_PLUGIN_URL . 'assets/js/slot-picker.js', [ 'jquery' ], WBP_VERSION, true );
 		wp_localize_script( 'wbp-slot-picker', 'wbp_slot_picker', [
-			'ajax_url' => admin_url( 'admin-ajax.php' ),
-			'nonce'    => wp_create_nonce( 'wbp_slot_nonce' ),
+			'rest_url' => esc_url_raw( rest_url( 'wbp/v1/' ) ),
+			'nonce'    => wp_create_nonce( 'wp_rest' ),
+			'i18n'     => [
+				'loading'  => __( 'Loading available slots...', 'wp-bookable-products' ),
+				'no_slots' => __( 'No slots available for selected date.', 'wp-bookable-products' ),
+				'error'    => __( 'Unable to load slots. Please try again.', 'wp-bookable-products' ),
+			],
 		] );
 	}
 
 	public function register_rest_routes(): void {
-		Rest\Controller::init();
+		WBP_Rest\Controller::register_routes();
 	}
 }

@@ -208,4 +208,307 @@ class Database {
 	public static function get_deprecated_columns(): array {
 		return []; // v1 uses all new columns.
 	}
+
+	/**
+	 * Get default price for a resource.
+	 *
+	 * @param int $resource_id Resource ID.
+	 * @return float Default price.
+	 */
+	public static function get_resource_default_price( int $resource_id ): float {
+		global $wpdb;
+
+		$price = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT default_price FROM {$wpdb->wbp_resources} WHERE id = %d AND status = 'active'",
+				$resource_id
+			)
+		);
+
+		return $price ? floatval( $price ) : 0.0;
+	}
+
+	/**
+	 * Check if a resource exists and is active.
+	 *
+	 * @param int $resource_id Resource ID.
+	 * @return bool True if active.
+	 */
+	public static function is_resource_active( int $resource_id ): bool {
+		global $wpdb;
+
+		$count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->wbp_resources} WHERE id = %d AND status = 'active'",
+				$resource_id
+			)
+		);
+
+		return $count > 0;
+	}
+
+	/**
+	 * Get all active resources.
+	 *
+	 * @return array[] Array of resource data.
+	 */
+	public static function get_all_resources(): array {
+		global $wpdb;
+
+		$rows = $wpdb->get_results(
+			"SELECT * FROM {$wpdb->wbp_resources} WHERE status = 'active' ORDER BY name ASC",
+			ARRAY_A
+		);
+
+		if ( empty( $rows ) ) {
+			return [];
+		}
+
+		return array_map(
+			static function ( $row ) {
+				return [
+					'id'               => absint( $row['id'] ),
+					'resource_key'     => sanitize_text_field( $row['resource_key'] ),
+					'name'             => sanitize_text_field( $row['name'] ),
+					'description'      => wp_strip_all_tags( $row['description'] ),
+					'capacity'         => absint( $row['capacity'] ),
+					'duration_minutes' => absint( $row['duration_minutes'] ),
+					'buffer_minutes'   => absint( $row['buffer_minutes'] ),
+					'default_price'    => (float) $row['default_price'],
+				];
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * Insert a new resource.
+	 *
+	 * @param array $data Resource data.
+	 * @return int Resource ID.
+	 */
+	public static function insert_resource( array $data ): int {
+		global $wpdb;
+
+		$id = $wpdb->insert(
+			$wpdb->wbp_resources,
+			[
+				'resource_key'     => sanitize_text_field( $data['resource_key'] ?? '' ),
+				'name'             => sanitize_text_field( $data['name'] ?? '' ),
+				'description'      => wp_kses_post( $data['description'] ?? '' ),
+				'capacity'         => max( 1, absint( $data['capacity'] ?? 1 ) ),
+				'duration_minutes' => max( 15, absint( $data['duration_minutes'] ?? 60 ) ),
+				'buffer_minutes'   => max( 0, absint( $data['buffer_minutes'] ?? 0 ) ),
+				'default_price'    => floatval( $data['default_price'] ?? 0 ),
+				'status'           => in_array( $data['status'] ?? 'active', [ 'active', 'inactive' ], true ) ? $data['status'] : 'active',
+			],
+			[ '%s', '%s', '%s', '%d', '%d', '%d', '%f', '%s' ]
+		);
+
+		if ( false === $id ) {
+			throw new \Exception(
+				sprintf(
+					'Failed to insert resource: %s',
+					$wpdb->last_error ?: 'Unknown database error'
+				)
+			);
+		}
+
+		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Update a resource.
+	 *
+	 * @param int   $id Resource ID.
+	 * @param array $data Updated fields.
+	 * @return bool Success.
+	 */
+	public static function update_resource( int $id, array $data ): bool {
+		global $wpdb;
+
+		$fields = [];
+		$types  = [];
+
+		if ( isset( $data['resource_key'] ) ) {
+			$fields[] = "resource_key = %s";
+			$types[]  = '%s';
+		}
+		if ( isset( $data['name'] ) ) {
+			$fields[] = "name = %s";
+			$types[]  = '%s';
+		}
+		if ( isset( $data['description'] ) ) {
+			$fields[] = "description = %s";
+			$types[]  = '%s';
+		}
+		if ( isset( $data['capacity'] ) ) {
+			$fields[] = "capacity = %d";
+			$types[]  = '%d';
+		}
+		if ( isset( $data['duration_minutes'] ) ) {
+			$fields[] = "duration_minutes = %d";
+			$types[]  = '%d';
+		}
+		if ( isset( $data['buffer_minutes'] ) ) {
+			$fields[] = "buffer_minutes = %d";
+			$types[]  = '%d';
+		}
+		if ( isset( $data['default_price'] ) ) {
+			$fields[] = "default_price = %f";
+			$types[]  = '%f';
+		}
+		if ( isset( $data['status'] ) ) {
+			$valid_status = in_array( $data['status'], [ 'active', 'inactive' ], true );
+			if ( $valid_status ) {
+				$fields[] = "status = %s";
+				$types[]  = '%s';
+			}
+		}
+
+		if ( empty( $fields ) ) {
+			return false;
+		}
+
+		$sql    = "UPDATE {$wpdb->wbp_resources} SET " . implode( ', ', $fields ) . " WHERE id = %d";
+		$params = array_merge( $types, [ $id ] );
+		$result = $wpdb->query( $wpdb->prepare( $sql, ...$params ) );
+
+		if ( false === $result ) {
+			throw new \Exception(
+				sprintf(
+					'Failed to update resource %d: %s',
+					$id,
+					$wpdb->last_error ?: 'Unknown database error'
+				)
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Delete a resource by ID.
+	 *
+	 * @param int $id Resource ID.
+	 * @return bool Success.
+	 */
+	public static function delete_resource( int $id ): bool {
+		global $wpdb;
+
+		// Cascade through foreign keys.
+		$deleted_items = $wpdb->delete( $wpdb->wbp_availability, [ 'resource_id' => $id ], [ '%d' ] );
+		$deleted       = $wpdb->delete( $wpdb->wbp_resources, [ 'id' => $id ], [ '%d' ] );
+
+		return false !== $deleted;
+	}
+
+	/**
+	 * Create availability slots for a resource on a date range.
+	 * Bulk-inserts rows in batches.
+	 *
+	 * @param int    $resource_id Resource ID.
+	 * @param string $start_date  Start date Y-m-d.
+	 * @param string $end_date    End date Y-m-d.
+	 * @param string $time_start  Start time H:i.
+	 * @param string $time_end    End time H:i.
+	 * @param int    $interval    Slot interval in minutes.
+	 * @param int    $max_bookings Max bookings per slot.
+	 * @return int Number of slots created.
+	 */
+	public static function create_availability_slots(
+		int $resource_id,
+		string $start_date,
+		string $end_date,
+		string $time_start = '09:00',
+		string $time_end   = '17:00',
+		int    $interval   = 60,
+		int    $max_bookings = 1
+	): int {
+		global $wpdb;
+
+		$start = strtotime( $start_date . ' ' . $time_start );
+		$end   = strtotime( $end_date . ' ' . $time_end );
+
+		if ( false === $start || false === $end ) {
+			throw new \Exception( 'Invalid date or time format.' );
+		}
+
+		$inserted = 0;
+		$current  = $start;
+		$batches  = [];
+
+		while ( $current + $interval <= $end ) {
+			$row = [
+				'resource_id'    => $resource_id,
+				'slot_start'     => gmdate( 'Y-m-d H:i:s', $current ),
+				'slot_end'       => gmdate( 'Y-m-d H:i:s', $current + $interval ),
+				'max_bookings'   => $max_bookings,
+				'current_bookings' => 0,
+				'is_booked'      => 0,
+				'status'         => 'available',
+			];
+
+			$batches[] = $row;
+			$current += $interval;
+			$inserted++;
+
+			// Batch inserts at 200 rows to avoid oversized queries.
+			if ( count( $batches ) >= 200 ) {
+				self::batch_insert_availability( $batches );
+				$batches = [];
+			}
+		}
+
+		// Flush remaining batch.
+		if ( ! empty( $batches ) ) {
+			self::batch_insert_availability( $batches );
+		}
+
+		return $inserted;
+	}
+
+	/**
+	 * Batch insert availability slots.
+	 *
+	 * @param array[] $rows Rows to insert.
+	 */
+	private static function batch_insert_availability( array $rows ): void {
+		global $wpdb;
+
+		$columns = [ 'resource_id', 'slot_start', 'slot_end', 'max_bookings', 'current_bookings', 'is_booked', 'status' ];
+		$values  = [];
+		$types   = [];
+
+		foreach ( $rows as $row ) {
+			$values[] = '(%d, %s, %s, %d, %d, %d, %s)';
+			$types[]  = '%d';
+			$types[]  = '%s';
+			$types[]  = '%s';
+			$types[]  = '%d';
+			$types[]  = '%d';
+			$types[]  = '%d';
+			$types[]  = '%s';
+		}
+
+		$sql = sprintf(
+			"INSERT IGNORE INTO {$wpdb->wbp_availability} (%s) VALUES %s",
+			implode( ',', $columns ),
+			implode( ',', $values )
+		);
+
+		// Flatten values array for prepare.
+		$flat_values = [];
+		foreach ( $rows as $row ) {
+			$flat_values[] = $row['resource_id'];
+			$flat_values[] = $row['slot_start'];
+			$flat_values[] = $row['slot_end'];
+			$flat_values[] = $row['max_bookings'];
+			$flat_values[] = $row['current_bookings'];
+			$flat_values[] = $row['is_booked'];
+			$flat_values[] = $row['status'];
+		}
+
+		$wpdb->query( $wpdb->prepare( $sql, ...$flat_values ) );
+	}
 }
